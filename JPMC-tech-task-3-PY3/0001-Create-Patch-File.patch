@@ -1,0 +1,113 @@
+From 33255b3abea6e3584c2d05742b0647213f191ea0 Mon Sep 17 00:00:00 2001
+From: Kashika Adarsh <kashikaadarsh99@gmail.com>
+Date: Mon, 18 May 2020 17:40:56 +0530
+Subject: [PATCH] Create Patch File
+
+---
+ src/DataManipulator.ts | 35 ++++++++++++++++++++++++-----------
+ src/Graph.tsx          | 25 +++++++++++++++----------
+ 2 files changed, 39 insertions(+), 21 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index f6b15ff..395e52c 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,33 @@
+ import { ServerRespond } from './DataStreamer';
+ 
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++  price_abc : Number,
++  price_def : Number,
++  ratio : Number,
++  upper_bound : Number,
++  lower_bound : Number,
+   timestamp: Date,
++  trigger_alert : number | undefined,
+ }
+ 
+ 
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]): Row[] {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverRespond: ServerRespond[]): Row {
++    const priceABC=(serverRespond[0].top_ask.price + serverRespond[0].top_bid.price)/2;
++    const priceDEF=(serverRespond[1].top_ask.price + serverRespond[1].top_bid.price)/2;
++    const ratio = priceABC/priceDEF;
++    const upperBound = 1+0.05;
++    const lowerBound = 1 - 0.05;   //only a single value is passed instead of an array of values 
++    return {
++      price_abc : priceABC,
++      price_def : priceDEF,
++      ratio,
++      timestamp:serverRespond[0].timestamp > serverRespond[1].timestamp?   
++      serverRespond[0].timestamp : serverRespond[1].timestamp,        //index 0 is about stock ABC and index 1 is about stock DEF
++      upper_bound : upperBound,
++      lower_bound : lowerBound,
++      trigger_alert : (ratio > upperBound ||ratio < lowerBound) ? ratio :undefined,   // only defined when the upper or lower limits are surpassed
++
++
++    };
+   }
+-}
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 58fb997..a064ad7 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -23,9 +23,12 @@ class Graph extends Component<IProps, {}> {
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+     const schema = {
+-      stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      price_abc : 'float',
++      price_def : 'float',
++      ratio : 'float',
++      upper_bound : 'float',       //upper limit for values
++      lower_bound : 'float',       //lower limit for values
++      trigger_alert : 'float',    //for when the upper-bound and lower-bound are surpassed
+       timestamp: 'date',
+     };
+ 
+@@ -38,21 +41,23 @@ class Graph extends Component<IProps, {}> {
+       elem.setAttribute('view', 'y_line');
+       elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio:,"lower_bound","upper_bound","trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        price_abc : 'avg',
++        price_def : 'avg',
++        upper_bound:'avg',
++        lower_bound: 'avg',
++        trigger_alert : 'avg',
+         timestamp: 'distinct count',
+-      }));
++      }));                           //to handle duplicate data
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ]);
+     }
+   }
+ }
+-- 
+2.26.2.windows.1
+
